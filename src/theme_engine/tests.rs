@@ -542,9 +542,9 @@ fn built_in_classic_uses_149_geometry() {
     assert_eq!(theme.name, "Classic v1");
     assert_eq!(theme.validate(), Vec::<String>::new());
     for (runtime, expected_width) in [
-        (ThemeRuntime::new(true, false, false), 217),
-        (ThemeRuntime::new(true, true, false), 285),
-        (ThemeRuntime::new(true, true, true), 375),
+        (ThemeRuntime::new(true, false, false), 263),
+        (ThemeRuntime::new(true, true, false), 331),
+        (ThemeRuntime::new(true, true, true), 421),
     ] {
         assert_eq!(
             resolve_surface_size(&theme, 0, None, runtime),
@@ -755,8 +755,8 @@ fn opencode_monthly_window_is_available_to_templates_when_present() {
 fn starter_theme_renders_transparent_pixels_at_declared_size() {
     let theme = ThemeDocument::starter();
     let rendered = render_theme(&theme, None);
-    assert_eq!((rendered.width, rendered.height), (217, 46));
-    assert_eq!(rendered.pixels.len(), 217 * 46);
+    assert_eq!((rendered.width, rendered.height), (263, 46));
+    assert_eq!(rendered.pixels.len(), 263 * 46);
     assert!(rendered.pixels.iter().any(|pixel| pixel >> 24 > 0));
     assert_eq!(rendered.pixels[0] >> 24, 0);
     let track_alpha = (30..139)
@@ -797,10 +797,10 @@ fn theme_surfaces_rasterize_at_requested_dpi_scales() {
     let theme = ThemeDocument::starter();
     let runtime = ThemeRuntime::new(true, false, false);
     for (scale, width, height) in [
-        (1.0, 217, 46),
-        (1.25, 271, 58),
-        (1.5, 326, 69),
-        (2.0, 434, 92),
+        (1.0, 263, 46),
+        (1.25, 329, 58),
+        (1.5, 395, 69),
+        (2.0, 526, 92),
     ] {
         let rendered = render_theme_surface_with_runtime_at_scale(&theme, 0, None, runtime, scale);
         assert_eq!((rendered.width, rendered.height), (width, height));
@@ -865,7 +865,7 @@ fn invalid_render_scales_fall_back_to_one() {
             ThemeRuntime::default(),
             scale,
         );
-        assert_eq!((rendered.width, rendered.height), (217, 46));
+        assert_eq!((rendered.width, rendered.height), (263, 46));
     }
 }
 
@@ -1032,7 +1032,7 @@ fn render_collapses_layout_while_zero_visibility_keeps_space() {
     theme.surfaces[0].children[claude].visibility = 0.0.into();
     assert_eq!(
         resolve_object_bounds_with_runtime(&theme, 0, codex, None, runtime).map(|bounds| bounds.0),
-        Some(164.0)
+        Some(210.0)
     );
 
     theme.surfaces[0].children[claude].render = 0.0.into();
@@ -1095,13 +1095,13 @@ fn starter_adapts_width_segments_and_collapsed_provider_rows() {
             .unwrap()
     };
     for (runtime, width, segments) in [
-        (ThemeRuntime::new(true, false, false), 217, 10),
+        (ThemeRuntime::new(true, false, false), 263, 10),
         (ThemeRuntime::new(false, true, false), 217, 10),
         (ThemeRuntime::new(false, false, true), 217, 10),
-        (ThemeRuntime::new(true, true, false), 285, 5),
-        (ThemeRuntime::new(true, false, true), 285, 5),
+        (ThemeRuntime::new(true, true, false), 331, 5),
+        (ThemeRuntime::new(true, false, true), 331, 5),
         (ThemeRuntime::new(false, true, true), 285, 5),
-        (ThemeRuntime::new(true, true, true), 375, 4),
+        (ThemeRuntime::new(true, true, true), 421, 4),
         (
             ThemeRuntime::from_providers(ProviderSet::from_enabled([ProviderId::OpenCode])),
             245,
@@ -1114,7 +1114,7 @@ fn starter_adapts_width_segments_and_collapsed_provider_rows() {
         ),
         (
             ThemeRuntime::from_providers(ProviderSet::from_enabled(ProviderId::ALL)),
-            545,
+            591,
             2,
         ),
     ] {
@@ -1162,7 +1162,7 @@ fn starter_adapts_width_segments_and_collapsed_provider_rows() {
             claude_and_antigravity,
         )
         .map(|bounds| bounds.0),
-        Some(164.0)
+        Some(210.0)
     );
 }
 
@@ -2069,6 +2069,102 @@ fn classic_usage_direction_defaults_to_used_until_enabled() {
         assert_eq!(evaluate(&value.0, &context).unwrap(), expected);
         assert_eq!(format_template(template, &context), text);
     }
+}
+
+#[test]
+fn classic_pace_badge_projects_claude_usage_against_the_elapsed_window() {
+    use crate::models::{UsageData, UsageSection};
+
+    fn badge<'a>(theme: &'a ThemeDocument, id: &str) -> &'a SceneObject {
+        theme.surfaces[0]
+            .children
+            .iter()
+            .find(|object| object.id == id)
+            .expect("pace badge")
+    }
+    fn template(theme: &ThemeDocument, id: &str) -> String {
+        let SceneContent::Text { template, .. } = &badge(theme, id).content else {
+            panic!("expected a text badge")
+        };
+        template.clone()
+    }
+    // Exactly one of the light and dark variants shows at a time, whichever way
+    // the host happens to be themed, so the pair is summed instead of being
+    // asserted apart.
+    fn shown(theme: &ThemeDocument, context: &DataContext, window: &str) -> f64 {
+        ["dark", "light"]
+            .into_iter()
+            .map(|mode| {
+                let id = format!("claude-{window}-pace-{mode}");
+                evaluate(&badge(theme, &id).render.0, context).unwrap()
+            })
+            .sum()
+    }
+    fn reading(stale: bool) -> AppUsageData {
+        let now = std::time::SystemTime::now();
+        AppUsageData::from_iter([(
+            ProviderId::Claude,
+            UsageData {
+                // 48% spent with 1h18m left: 74% of the five hours has gone, so
+                // this pace lands on 65% by the time the window resets.
+                session: UsageSection {
+                    available: true,
+                    percentage: 48.0,
+                    resets_at: Some(now + std::time::Duration::from_secs(4_680)),
+                },
+                // 22% spent with 5d15h left: only 19.6% of the week has gone, so
+                // the very same pace overshoots the limit at 112%.
+                weekly: UsageSection {
+                    available: true,
+                    percentage: 22.0,
+                    resets_at: Some(now + std::time::Duration::from_secs(486_000)),
+                },
+                stale,
+                ..Default::default()
+            },
+        )])
+    }
+
+    let theme = ThemeDocument::starter();
+    let ready = reading(false);
+    let context = DataContext::from_usage(Some(&ready), &Canvas::default());
+    for id in ["claude-session-pace-dark", "claude-session-pace-light"] {
+        assert_eq!(
+            format_template(&template(&theme, id), &context),
+            "\u{2193}65%"
+        );
+    }
+    for id in ["claude-weekly-pace-dark", "claude-weekly-pace-light"] {
+        assert_eq!(
+            format_template(&template(&theme, id), &context),
+            "\u{2191}112%"
+        );
+    }
+    assert_eq!(shown(&theme, &context, "session"), 1.0);
+    assert_eq!(shown(&theme, &context, "weekly"), 1.0);
+
+    // A reading carried over from a failed poll keeps ageing while its figures
+    // stand still, so its projection would drift downwards on its own.
+    let stale = DataContext::from_usage(Some(&reading(true)), &Canvas::default());
+    assert_eq!(shown(&theme, &stale, "session"), 0.0);
+    assert_eq!(shown(&theme, &stale, "weekly"), 0.0);
+
+    // A window with barely any time behind it cannot be projected from yet.
+    let young = AppUsageData::from_iter([(
+        ProviderId::Claude,
+        UsageData {
+            session: UsageSection {
+                available: true,
+                percentage: 3.0,
+                resets_at: Some(
+                    std::time::SystemTime::now() + std::time::Duration::from_secs(17_100),
+                ),
+            },
+            ..Default::default()
+        },
+    )]);
+    let young = DataContext::from_usage(Some(&young), &Canvas::default());
+    assert_eq!(shown(&theme, &young, "session"), 0.0);
 }
 
 #[test]

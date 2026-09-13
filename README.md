@@ -11,6 +11,7 @@ A lightweight, open-source Windows taskbar widget for monitoring Claude Code usa
 
 - Displays current usage and time remaining until each limit resets
 - Counts usage up from zero or down from the full allowance, whichever you prefer
+- Flags whether Claude usage is running ahead of or behind a flat pace, with the projected total for the window
 - Supports Claude Code, Codex, Google Antigravity, OpenCode Go, and Cursor
 - Lives in the Windows taskbar with quick controls in the system tray
 - Supports multiple monitors and Windows startup
@@ -50,6 +51,8 @@ claude-code-usage-monitor --dashboard
 ```
 
 Use the dashboard to select providers, change the refresh interval, choose a display, enable startup, or customize the widget. **Settings > Display > Usage direction** switches the default theme and other themes that support this setting between showing what has been used and what is left, with Used as the default. Selecting Remaining makes a fresh limit read 100% and drain as you work.
+
+Each Claude row in the default theme carries a pace badge to the right of its figures. The arrow reads `↑` when usage is at least 10% ahead of a flat pace through the window, `↓` when it is at least 10% behind, and `=` while it is on pace. The number beside the arrow is the total the window would reach if the current average pace held to the reset, so `↑112%` means the limit arrives before the window does. The badge stays hidden until a tenth of the window has passed, and whenever the reading was carried over from a failed poll.
 
 Theme authors can opt in with `.display` bindings, including `{claude.session.display:usage_line}` and `{claude.session.display:usage_badge}`. Existing `.percentage`, `.remaining`, and unsuffixed usage summaries keep their meaning; warning thresholds should continue to use `.percentage`.
 
